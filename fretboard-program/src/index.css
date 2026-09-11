@@ -318,9 +318,21 @@ body {
 
 .tr-rep-columns {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 20px;
   margin-top: 14px;
+}
+
+.tr-nav-group-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin: 16px 0 2px;
+  padding-left: 4px;
+}
+
+.tr-nav-group-label:first-child {
+  margin-top: 0;
 }
 
 .tr-rep-col-title {

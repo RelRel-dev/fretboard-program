@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Flame, Check } from "lucide-react";
 
-const STORAGE_KEY = "fretboard-program-v1";
+const STORAGE_KEY = "fretboard-program-v2";
 
-const MONTHS = [
+const GUITAR_MONTHS = [
   {
     id: "month1",
     roman: "I",
@@ -135,6 +135,143 @@ const MONTHS = [
   },
 ];
 
+const PIANO_MONTHS = [
+  {
+    id: "month1",
+    roman: "I",
+    title: "Hands, Scales & Real Triads",
+    weeks: [
+      {
+        id: "w1",
+        label: "Week 1",
+        tasks: [
+          "Learn C, G, D major scales with correct fingering, hands separately",
+          "Root-position triads in all 12 keys, right hand, naming each note aloud",
+          "Left hand roots + right hand triads together, slow tempo",
+        ],
+      },
+      {
+        id: "w2",
+        label: "Week 2",
+        tasks: [
+          "Add F, Bb, Eb major scales; start A, E, D minor scales, hands separately",
+          "1st and 2nd inversions of major triads, right hand, all 12 keys",
+          "Left hand plays root + fifth under right-hand triads",
+        ],
+      },
+      {
+        id: "w3",
+        label: "Week 3",
+        tasks: [
+          "Minor triad inversions, right hand, all 12 keys",
+          "Basic notation: read triads on the treble staff, matching what you already play by ear",
+          "Left hand plays a simple walking-root pattern under right-hand chords",
+        ],
+      },
+      {
+        id: "w4",
+        label: "Week 4",
+        tasks: [
+          "Review: any major/minor triad, any inversion, any key, hands together, no hesitation",
+          "Add bass clef reading for left-hand root notes",
+          "Metronome check: steady tempo through a full 12-key triad cycle",
+        ],
+      },
+    ],
+  },
+  {
+    id: "month2",
+    roman: "II",
+    title: "Gospel & Extended Harmony",
+    weeks: [
+      {
+        id: "w1",
+        label: "Week 1",
+        tasks: [
+          "Formalize Maj7 / m7 / Dom7 construction consciously, all 12 keys, root position",
+          "Learn Drop 2 voicing: split a 7th chord across both hands",
+          "Left hand: broken/arpeggiated roots instead of static notes",
+        ],
+      },
+      {
+        id: "w2",
+        label: "Week 2",
+        tasks: [
+          "Add dim7 and m7b5 (half-diminished) chords, all 12 keys",
+          "Practice ii-V-I progressions in 3–4 keys using 7th chords, both hands",
+          "Ear training: ID Maj7 vs. m7 vs. Dom7 vs. m7b5, 10 min/day",
+        ],
+      },
+      {
+        id: "w3",
+        label: "Week 3",
+        tasks: [
+          "9th chords (Maj9, m9, Dom9) as gospel-style voicings: root/7th left hand, upper structure right hand",
+          "Start transcribing one gospel/soul progression by ear",
+          "Continue ii-V-I drilling in all 12 keys",
+        ],
+      },
+      {
+        id: "w4",
+        label: "Week 4",
+        tasks: [
+          "Review this month's voicings, hands together, steady tempo",
+          "Finish the transcription from Week 3, play it start to finish",
+          "Practice voice leading: move only the notes that need to move between chords",
+        ],
+      },
+    ],
+  },
+  {
+    id: "month3",
+    roman: "III",
+    title: "Real Songs, Real Independence",
+    weeks: [
+      {
+        id: "w1",
+        label: "Week 1",
+        tasks: [
+          "Start a new full song (notation + ear together, not just tutorial-following)",
+          "Comping: play the same progression with 3 different rhythmic patterns",
+          "Left hand plays a moving bassline, not just roots, under static right-hand chords",
+        ],
+      },
+      {
+        id: "w2",
+        label: "Week 2",
+        tasks: [
+          "Continue the song, adding melody/fill lines by ear",
+          "Improvise a simple right-hand melodic idea over a 2–4 chord gospel progression",
+          "Ear training: dictate a 4-chord progression from a song you don't know",
+        ],
+      },
+      {
+        id: "w3",
+        label: "Week 3",
+        tasks: [
+          "Hands-together independence drill: distinct rhythms in each hand",
+          "Record yourself playing the Week 1 song start to finish",
+          "Begin a second transcription with less tutorial-dependence than before",
+        ],
+      },
+      {
+        id: "w4",
+        label: "Week 4",
+        tasks: [
+          "Perform / record the full song, hands independent, no hesitation on any chord",
+          "Compare this recording to your Month 1 baseline",
+          "Reflect: what's automatic now vs. what still needs conscious thought",
+        ],
+      },
+    ],
+  },
+];
+
+const INSTRUMENTS = [
+  { id: "guitar", label: "Guitar", months: GUITAR_MONTHS },
+  { id: "piano", label: "Piano", months: PIANO_MONTHS },
+];
+
 const DAILY_BLOCKS = [
   { id: "technique", label: "Technique & metronome drills", minutes: "15 min" },
   { id: "core", label: "This month's core focus", minutes: "20 min" },
@@ -156,6 +293,12 @@ const DEFAULT_REPERTOIRE = [
   { id: "b4", instrument: "bass", title: "Kid Charlemagne", artist: "Steely Dan", status: "not-started" },
   { id: "b5", instrument: "bass", title: "Playa Playa", artist: "D'Angelo", status: "not-started" },
   { id: "b6", instrument: "bass", title: "Them Changes", artist: "Thundercat", status: "not-started" },
+  { id: "p1", instrument: "piano", title: "Rocket Love", artist: "Stevie Wonder", status: "can-play" },
+  { id: "p2", instrument: "piano", title: "Easy", artist: "Lionel Richie", status: "can-play" },
+  { id: "p3", instrument: "piano", title: "Isn't She Lovely", artist: "Stevie Wonder", status: "not-started" },
+  { id: "p4", instrument: "piano", title: "A Song for You", artist: "Donny Hathaway", status: "not-started" },
+  { id: "p5", instrument: "piano", title: "Fallin'", artist: "Alicia Keys", status: "not-started" },
+  { id: "p6", instrument: "piano", title: "Higher Ground", artist: "Stevie Wonder", status: "not-started" },
 ];
 
 const STATUS_CYCLE = ["not-started", "learning", "can-play"];
@@ -169,19 +312,25 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function findInstrument(instrumentId) {
+  return INSTRUMENTS.find((i) => i.id === instrumentId);
+}
+
 function buildDefaultTaskState() {
   const state = {};
-  MONTHS.forEach((m) => {
-    state[m.id] = {};
-    m.weeks.forEach((w) => {
-      state[m.id][w.id] = w.tasks.map(() => false);
+  INSTRUMENTS.forEach((inst) => {
+    state[inst.id] = {};
+    inst.months.forEach((m) => {
+      state[inst.id][m.id] = {};
+      m.weeks.forEach((w) => {
+        state[inst.id][m.id][w.id] = w.tasks.map(() => false);
+      });
     });
   });
   return state;
 }
 
-// Reads the whole saved blob once, synchronously. localStorage is
-// synchronous, so no async/await belongs anywhere near it.
+// localStorage is synchronous — no async/await belongs anywhere near it.
 function readStorage() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
@@ -203,10 +352,16 @@ function writeStorage(data) {
   return true;
 }
 
+function parseSection(section) {
+  if (section === "repertoire") return { type: "repertoire" };
+  const [instrument, monthId] = section.split(":");
+  return { type: "month", instrument, monthId };
+}
+
 export default function App() {
   const saved = readStorage();
 
-  const [activeSection, setActiveSection] = useState("month1");
+  const [activeSection, setActiveSection] = useState("guitar:month1");
   const [taskDone, setTaskDone] = useState(
     () => saved?.taskDone || buildDefaultTaskState()
   );
@@ -223,22 +378,30 @@ export default function App() {
     setSaveError(!ok);
   }, [taskDone, dailySessions, repertoire]);
 
-  const toggleTask = useCallback((monthId, weekId, idx) => {
+  const toggleTask = useCallback((instrumentId, monthId, weekId, idx) => {
     setTaskDone((prev) => {
-      const next = { ...prev, [monthId]: { ...prev[monthId] } };
-      const arr = [...next[monthId][weekId]];
+      const next = {
+        ...prev,
+        [instrumentId]: {
+          ...prev[instrumentId],
+          [monthId]: { ...prev[instrumentId][monthId] },
+        },
+      };
+      const arr = [...next[instrumentId][monthId][weekId]];
       arr[idx] = !arr[idx];
-      next[monthId][weekId] = arr;
+      next[instrumentId][monthId][weekId] = arr;
       return next;
     });
   }, []);
 
-  const toggleDailyBlock = useCallback((blockId) => {
+  const toggleDailyBlock = useCallback((instrumentId, blockId) => {
     const key = todayKey();
     setDailySessions((prev) => {
-      const today = { ...(prev[key] || {}) };
-      today[blockId] = !today[blockId];
-      return { ...prev, [key]: today };
+      const day = { ...(prev[key] || {}) };
+      const instDay = { ...(day[instrumentId] || {}) };
+      instDay[blockId] = !instDay[blockId];
+      day[instrumentId] = instDay;
+      return { ...prev, [key]: day };
     });
   }, []);
 
@@ -253,6 +416,7 @@ export default function App() {
     );
   }, []);
 
+  // Overall streak: a day counts if ANY instrument was practiced at all.
   let streak = 0;
   {
     let cursor = new Date();
@@ -260,7 +424,11 @@ export default function App() {
     while (true) {
       const key = cursor.toISOString().slice(0, 10);
       const day = dailySessions[key];
-      const hasAny = day && Object.values(day).some(Boolean);
+      const hasAny =
+        day &&
+        Object.values(day).some(
+          (instDay) => instDay && Object.values(instDay).some(Boolean)
+        );
       if (hasAny) {
         streak += 1;
         cursor.setDate(cursor.getDate() - 1);
@@ -270,32 +438,41 @@ export default function App() {
     }
   }
 
-  const totalPracticeDays = Object.values(dailySessions).filter((d) =>
-    Object.values(d || {}).some(Boolean)
+  const totalPracticeDays = Object.values(dailySessions).filter(
+    (day) =>
+      day &&
+      Object.values(day).some(
+        (instDay) => instDay && Object.values(instDay).some(Boolean)
+      )
   ).length;
 
-  function monthCompletion(monthId) {
-    const month = MONTHS.find((m) => m.id === monthId);
+  function monthCompletion(instrumentId, monthId) {
+    const inst = findInstrument(instrumentId);
+    const month = inst.months.find((m) => m.id === monthId);
     let total = 0;
     let done = 0;
     month.weeks.forEach((w) => {
-      const arr = taskDone[monthId][w.id];
+      const arr = taskDone[instrumentId][monthId][w.id];
       total += arr.length;
       done += arr.filter(Boolean).length;
     });
     return total === 0 ? 0 : Math.round((done / total) * 100);
   }
 
-  const todaysBlocks = dailySessions[todayKey()] || {};
+  const section = parseSection(activeSection);
+  const todaysBlocks =
+    section.type === "month"
+      ? (dailySessions[todayKey()] || {})[section.instrument] || {}
+      : {};
 
   return (
     <div className="tracker-root">
       <header className="tr-header">
         <div>
-          <p className="tr-eyebrow">Guitar &amp; Bass</p>
+          <p className="tr-eyebrow">Guitar, Bass &amp; Piano</p>
           <h1 className="tr-title">Fretboard Program</h1>
           <p className="tr-subtitle">
-            A three-month plan built off where you're actually starting from.
+            Three-month plans built off where you're actually starting from.
           </p>
         </div>
         <div className="tr-streak">
@@ -309,21 +486,32 @@ export default function App() {
 
       <div className="tr-body">
         <nav className="tr-nav">
-          {MONTHS.map((m) => (
-            <button
-              key={m.id}
-              className={`tr-nav-item ${activeSection === m.id ? "is-active" : ""}`}
-              onClick={() => setActiveSection(m.id)}
-              aria-pressed={activeSection === m.id}
-            >
-              <span className="tr-nav-roman">{m.roman}</span>
-              <span className="tr-nav-text">
-                <span className="tr-nav-month">Month {m.roman}</span>
-                <span className="tr-nav-focus">{m.title}</span>
-              </span>
-              <span className="tr-nav-pct">{monthCompletion(m.id)}%</span>
-            </button>
+          {INSTRUMENTS.map((inst) => (
+            <React.Fragment key={inst.id}>
+              <p className="tr-nav-group-label">{inst.label}</p>
+              {inst.months.map((m) => {
+                const key = `${inst.id}:${m.id}`;
+                return (
+                  <button
+                    key={key}
+                    className={`tr-nav-item ${activeSection === key ? "is-active" : ""}`}
+                    onClick={() => setActiveSection(key)}
+                    aria-pressed={activeSection === key}
+                  >
+                    <span className="tr-nav-roman">{m.roman}</span>
+                    <span className="tr-nav-text">
+                      <span className="tr-nav-month">Month {m.roman}</span>
+                      <span className="tr-nav-focus">{m.title}</span>
+                    </span>
+                    <span className="tr-nav-pct">
+                      {monthCompletion(inst.id, m.id)}%
+                    </span>
+                  </button>
+                );
+              })}
+            </React.Fragment>
           ))}
+          <p className="tr-nav-group-label">&nbsp;</p>
           <button
             className={`tr-nav-item ${activeSection === "repertoire" ? "is-active" : ""}`}
             onClick={() => setActiveSection("repertoire")}
@@ -338,80 +526,92 @@ export default function App() {
         </nav>
 
         <main className="tr-main">
-          <section className="tr-today">
-            <h2 className="tr-section-title">Today's session</h2>
-            <div className="tr-today-grid">
-              {DAILY_BLOCKS.map((b) => {
-                const on = !!todaysBlocks[b.id];
-                return (
-                  <button
-                    key={b.id}
-                    className={`tr-fret ${on ? "is-done" : ""}`}
-                    onClick={() => toggleDailyBlock(b.id)}
-                    aria-pressed={on}
-                  >
-                    <span className="tr-fret-dot">
-                      {on && <Check size={13} strokeWidth={3} />}
-                    </span>
-                    <span className="tr-fret-text">
-                      <span className="tr-fret-label">{b.label}</span>
-                      <span className="tr-fret-minutes">{b.minutes}</span>
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
+          {section.type === "month" && (
+            <section className="tr-today">
+              <h2 className="tr-section-title">
+                Today's session — {findInstrument(section.instrument).label}
+              </h2>
+              <div className="tr-today-grid">
+                {DAILY_BLOCKS.map((b) => {
+                  const on = !!todaysBlocks[b.id];
+                  return (
+                    <button
+                      key={b.id}
+                      className={`tr-fret ${on ? "is-done" : ""}`}
+                      onClick={() => toggleDailyBlock(section.instrument, b.id)}
+                      aria-pressed={on}
+                    >
+                      <span className="tr-fret-dot">
+                        {on && <Check size={13} strokeWidth={3} />}
+                      </span>
+                      <span className="tr-fret-text">
+                        <span className="tr-fret-label">{b.label}</span>
+                        <span className="tr-fret-minutes">{b.minutes}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
 
-          {activeSection !== "repertoire" ? (
+          {section.type === "month" ? (
             <section className="tr-month">
-              {MONTHS.filter((m) => m.id === activeSection).map((m) => (
-                <div key={m.id}>
-                  <div className="tr-month-head">
-                    <h2 className="tr-section-title">
-                      Month {m.roman} — {m.title}
-                    </h2>
-                    <span className="tr-month-pct">
-                      {monthCompletion(m.id)}% complete
-                    </span>
+              {(() => {
+                const inst = findInstrument(section.instrument);
+                const m = inst.months.find((mo) => mo.id === section.monthId);
+                return (
+                  <div>
+                    <div className="tr-month-head">
+                      <h2 className="tr-section-title">
+                        Month {m.roman} — {m.title}
+                      </h2>
+                      <span className="tr-month-pct">
+                        {monthCompletion(inst.id, m.id)}% complete
+                      </span>
+                    </div>
+                    <div className="tr-week-grid">
+                      {m.weeks.map((w) => (
+                        <div className="tr-week-card" key={w.id}>
+                          <h3 className="tr-week-title">{w.label}</h3>
+                          <ul className="tr-task-list">
+                            {w.tasks.map((task, idx) => {
+                              const done = taskDone[inst.id][m.id][w.id][idx];
+                              return (
+                                <li key={idx}>
+                                  <button
+                                    className={`tr-fret tr-fret--small ${done ? "is-done" : ""}`}
+                                    onClick={() =>
+                                      toggleTask(inst.id, m.id, w.id, idx)
+                                    }
+                                    aria-pressed={done}
+                                  >
+                                    <span className="tr-fret-dot">
+                                      {done && (
+                                        <Check size={11} strokeWidth={3} />
+                                      )}
+                                    </span>
+                                    <span className="tr-task-text">{task}</span>
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="tr-week-grid">
-                    {m.weeks.map((w) => (
-                      <div className="tr-week-card" key={w.id}>
-                        <h3 className="tr-week-title">{w.label}</h3>
-                        <ul className="tr-task-list">
-                          {w.tasks.map((task, idx) => {
-                            const done = taskDone[m.id][w.id][idx];
-                            return (
-                              <li key={idx}>
-                                <button
-                                  className={`tr-fret tr-fret--small ${done ? "is-done" : ""}`}
-                                  onClick={() => toggleTask(m.id, w.id, idx)}
-                                  aria-pressed={done}
-                                >
-                                  <span className="tr-fret-dot">
-                                    {done && <Check size={11} strokeWidth={3} />}
-                                  </span>
-                                  <span className="tr-task-text">{task}</span>
-                                </button>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                );
+              })()}
             </section>
           ) : (
             <section className="tr-repertoire">
               <h2 className="tr-section-title">Repertoire</h2>
               <div className="tr-rep-columns">
-                {["guitar", "bass"].map((inst) => (
+                {["guitar", "bass", "piano"].map((inst) => (
                   <div className="tr-rep-col" key={inst}>
                     <h3 className="tr-rep-col-title">
-                      {inst === "guitar" ? "Guitar" : "Bass"}
+                      {inst.charAt(0).toUpperCase() + inst.slice(1)}
                     </h3>
                     <ul className="tr-rep-list">
                       {repertoire
