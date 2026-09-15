@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Flame, Check } from "lucide-react";
+import { Flame, Check, Pencil, Plus, X, GripVertical } from "lucide-react";
 
-const STORAGE_KEY = "fretboard-program-v2";
+const STORAGE_KEY = "fretboard-program-v3";
+const LEGACY_STORAGE_KEY = "fretboard-program-v2";
 
-const GUITAR_MONTHS = [
+const GUITAR_MONTHS_TEMPLATE = [
   {
     id: "month1",
     roman: "I",
@@ -135,7 +136,7 @@ const GUITAR_MONTHS = [
   },
 ];
 
-const PIANO_MONTHS = [
+const PIANO_MONTHS_TEMPLATE = [
   {
     id: "month1",
     roman: "I",
@@ -267,10 +268,66 @@ const PIANO_MONTHS = [
   },
 ];
 
-const INSTRUMENTS = [
-  { id: "guitar", label: "Guitar", months: GUITAR_MONTHS },
-  { id: "piano", label: "Piano", months: PIANO_MONTHS },
+const INSTRUMENT_META = [
+  { id: "guitar", label: "Guitar" },
+  { id: "piano", label: "Piano" },
 ];
+
+function findInstrumentMeta(instrumentId) {
+  return INSTRUMENT_META.find((i) => i.id === instrumentId);
+}
+
+// Turns the plain-string task templates into stable-id task objects so
+// tasks can be added/removed/reordered without desyncing completion state.
+function materializeMonths(monthsTemplate) {
+  return monthsTemplate.map((m) => ({
+    ...m,
+    weeks: m.weeks.map((w) => ({
+      ...w,
+      tasks: w.tasks.map((text, idx) => ({
+        id: `${m.id}-${w.id}-t${idx + 1}`,
+        text,
+      })),
+    })),
+  }));
+}
+
+const DEFAULT_MONTHS_DATA = {
+  guitar: materializeMonths(GUITAR_MONTHS_TEMPLATE),
+  piano: materializeMonths(PIANO_MONTHS_TEMPLATE),
+};
+
+function taskKey(instrumentId, monthId, weekId, taskId) {
+  return `${instrumentId}:${monthId}:${weekId}:${taskId}`;
+}
+
+// Converts the old nested boolean-array taskDone shape (indexed by
+// position) into the new flat id-keyed doneMap, using the default
+// template to recover each task's id at its original position.
+function migrateLegacyTaskDone(legacyTaskDone) {
+  const doneMap = {};
+  if (!legacyTaskDone) return doneMap;
+  Object.keys(legacyTaskDone).forEach((instId) => {
+    const months = DEFAULT_MONTHS_DATA[instId];
+    if (!months) return;
+    Object.keys(legacyTaskDone[instId]).forEach((monthId) => {
+      const month = months.find((m) => m.id === monthId);
+      if (!month) return;
+      Object.keys(legacyTaskDone[instId][monthId]).forEach((weekId) => {
+        const week = month.weeks.find((w) => w.id === weekId);
+        if (!week) return;
+        const arr = legacyTaskDone[instId][monthId][weekId] || [];
+        arr.forEach((val, idx) => {
+          const task = week.tasks[idx];
+          if (task && val) {
+            doneMap[taskKey(instId, monthId, weekId, task.id)] = true;
+          }
+        });
+      });
+    });
+  });
+  return doneMap;
+}
 
 const DAILY_BLOCKS = [
   { id: "technique", label: "Technique & metronome drills", minutes: "15 min" },
@@ -312,30 +369,14 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function findInstrument(instrumentId) {
-  return INSTRUMENTS.find((i) => i.id === instrumentId);
-}
-
-function buildDefaultTaskState() {
-  const state = {};
-  INSTRUMENTS.forEach((inst) => {
-    state[inst.id] = {};
-    inst.months.forEach((m) => {
-      state[inst.id][m.id] = {};
-      m.weeks.forEach((w) => {
-        state[inst.id][m.id][w.id] = w.tasks.map(() => false);
-      });
-    });
-  });
-  return state;
-}
-
 // localStorage is synchronous — no async/await belongs anywhere near it.
 function readStorage() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
+    if (raw) return { legacy: false, ...JSON.parse(raw) };
+    const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    if (legacyRaw) return { legacy: true, ...JSON.parse(legacyRaw) };
+    return null;
   } catch (err) {
     console.error("Failed to read saved progress:", err);
     return null;
@@ -362,9 +403,16 @@ export default function App() {
   const saved = readStorage();
 
   const [activeSection, setActiveSection] = useState("guitar:month1");
-  const [taskDone, setTaskDone] = useState(
-    () => saved?.taskDone || buildDefaultTaskState()
+  const [monthsData, setMonthsData] = useState(
+    () => saved?.monthsData || DEFAULT_MONTHS_DATA
   );
+  const [doneMap, setDoneMap] = useState(() => {
+    if (saved?.doneMap) return saved.doneMap;
+    if (saved?.legacy && saved?.taskDone) {
+      return migrateLegacyTaskDone(saved.taskDone);
+    }
+    return {};
+  });
   const [dailySessions, setDailySessions] = useState(
     () => saved?.dailySessions || {}
   );
@@ -372,25 +420,162 @@ export default function App() {
     () => saved?.repertoire || DEFAULT_REPERTOIRE
   );
   const [saveError, setSaveError] = useState(false);
+  const [editingWeek, setEditingWeek] = useState(null);
+  const [draggedTaskIdx, setDraggedTaskIdx] = useState(null);
+  const [focusTaskId, setFocusTaskId] = useState(null);
+  const [songDraft, setSongDraft] = useState({});
+  const [draggedSong, setDraggedSong] = useState(null);
 
   useEffect(() => {
-    const ok = writeStorage({ taskDone, dailySessions, repertoire });
+    const ok = writeStorage({ monthsData, doneMap, dailySessions, repertoire });
     setSaveError(!ok);
-  }, [taskDone, dailySessions, repertoire]);
+  }, [monthsData, doneMap, dailySessions, repertoire]);
 
-  const toggleTask = useCallback((instrumentId, monthId, weekId, idx) => {
-    setTaskDone((prev) => {
-      const next = {
+  const toggleTask = useCallback((instrumentId, monthId, weekId, taskId) => {
+    const key = taskKey(instrumentId, monthId, weekId, taskId);
+    setDoneMap((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const updateTaskText = useCallback(
+    (instrumentId, monthId, weekId, taskId, text) => {
+      setMonthsData((prev) => ({
         ...prev,
-        [instrumentId]: {
-          ...prev[instrumentId],
-          [monthId]: { ...prev[instrumentId][monthId] },
-        },
-      };
-      const arr = [...next[instrumentId][monthId][weekId]];
-      arr[idx] = !arr[idx];
-      next[instrumentId][monthId][weekId] = arr;
+        [instrumentId]: prev[instrumentId].map((m) =>
+          m.id !== monthId
+            ? m
+            : {
+                ...m,
+                weeks: m.weeks.map((w) =>
+                  w.id !== weekId
+                    ? w
+                    : {
+                        ...w,
+                        tasks: w.tasks.map((t) =>
+                          t.id === taskId ? { ...t, text } : t
+                        ),
+                      }
+                ),
+              }
+        ),
+      }));
+    },
+    []
+  );
+
+  const addTask = useCallback((instrumentId, monthId, weekId) => {
+    const newId = `${monthId}-${weekId}-custom-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 6)}`;
+    setMonthsData((prev) => ({
+      ...prev,
+      [instrumentId]: prev[instrumentId].map((m) =>
+        m.id !== monthId
+          ? m
+          : {
+              ...m,
+              weeks: m.weeks.map((w) =>
+                w.id !== weekId
+                  ? w
+                  : { ...w, tasks: [...w.tasks, { id: newId, text: "" }] }
+              ),
+            }
+      ),
+    }));
+    setFocusTaskId(newId);
+  }, []);
+
+  const removeTask = useCallback((instrumentId, monthId, weekId, taskId) => {
+    setMonthsData((prev) => ({
+      ...prev,
+      [instrumentId]: prev[instrumentId].map((m) =>
+        m.id !== monthId
+          ? m
+          : {
+              ...m,
+              weeks: m.weeks.map((w) =>
+                w.id !== weekId
+                  ? w
+                  : { ...w, tasks: w.tasks.filter((t) => t.id !== taskId) }
+              ),
+            }
+      ),
+    }));
+    setDoneMap((prev) => {
+      const key = taskKey(instrumentId, monthId, weekId, taskId);
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
       return next;
+    });
+  }, []);
+
+  const reorderTask = useCallback(
+    (instrumentId, monthId, weekId, fromIdx, toIdx) => {
+      if (fromIdx === toIdx) return;
+      setMonthsData((prev) => ({
+        ...prev,
+        [instrumentId]: prev[instrumentId].map((m) =>
+          m.id !== monthId
+            ? m
+            : {
+                ...m,
+                weeks: m.weeks.map((w) => {
+                  if (w.id !== weekId) return w;
+                  const tasks = [...w.tasks];
+                  const [moved] = tasks.splice(fromIdx, 1);
+                  tasks.splice(toIdx, 0, moved);
+                  return { ...w, tasks };
+                }),
+              }
+        ),
+      }));
+    },
+    []
+  );
+
+  function updateSongDraft(instrument, field, value) {
+    setSongDraft((prev) => ({
+      ...prev,
+      [instrument]: { ...(prev[instrument] || {}), [field]: value },
+    }));
+  }
+
+  const addSong = useCallback(
+    (instrument) => {
+      const draft = songDraft[instrument] || {};
+      const title = (draft.title || "").trim();
+      if (!title) return;
+      const artist = (draft.artist || "").trim();
+      setRepertoire((prev) => [
+        ...prev,
+        {
+          id: `s-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          instrument,
+          title,
+          artist,
+          status: "not-started",
+        },
+      ]);
+      setSongDraft((prev) => ({ ...prev, [instrument]: { title: "", artist: "" } }));
+    },
+    [songDraft]
+  );
+
+  const removeSong = useCallback((id) => {
+    setRepertoire((prev) => prev.filter((s) => s.id !== id));
+  }, []);
+
+  const reorderSong = useCallback((instrument, fromIdx, toIdx) => {
+    if (fromIdx === toIdx) return;
+    setRepertoire((prev) => {
+      const items = prev.filter((s) => s.instrument === instrument);
+      const reordered = [...items];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+      let ptr = 0;
+      return prev.map((s) =>
+        s.instrument === instrument ? reordered[ptr++] : s
+      );
     });
   }, []);
 
@@ -447,14 +632,15 @@ export default function App() {
   ).length;
 
   function monthCompletion(instrumentId, monthId) {
-    const inst = findInstrument(instrumentId);
-    const month = inst.months.find((m) => m.id === monthId);
+    const months = monthsData[instrumentId];
+    const month = months.find((m) => m.id === monthId);
     let total = 0;
     let done = 0;
     month.weeks.forEach((w) => {
-      const arr = taskDone[instrumentId][monthId][w.id];
-      total += arr.length;
-      done += arr.filter(Boolean).length;
+      w.tasks.forEach((t) => {
+        total += 1;
+        if (doneMap[taskKey(instrumentId, monthId, w.id, t.id)]) done += 1;
+      });
     });
     return total === 0 ? 0 : Math.round((done / total) * 100);
   }
@@ -486,10 +672,10 @@ export default function App() {
 
       <div className="tr-body">
         <nav className="tr-nav">
-          {INSTRUMENTS.map((inst) => (
+          {INSTRUMENT_META.map((inst) => (
             <React.Fragment key={inst.id}>
               <p className="tr-nav-group-label">{inst.label}</p>
-              {inst.months.map((m) => {
+              {monthsData[inst.id].map((m) => {
                 const key = `${inst.id}:${m.id}`;
                 return (
                   <button
@@ -529,7 +715,7 @@ export default function App() {
           {section.type === "month" && (
             <section className="tr-today">
               <h2 className="tr-section-title">
-                Today's session — {findInstrument(section.instrument).label}
+                Today's session — {findInstrumentMeta(section.instrument).label}
               </h2>
               <div className="tr-today-grid">
                 {DAILY_BLOCKS.map((b) => {
@@ -558,8 +744,9 @@ export default function App() {
           {section.type === "month" ? (
             <section className="tr-month">
               {(() => {
-                const inst = findInstrument(section.instrument);
-                const m = inst.months.find((mo) => mo.id === section.monthId);
+                const instId = section.instrument;
+                const months = monthsData[instId];
+                const m = months.find((mo) => mo.id === section.monthId);
                 return (
                   <div>
                     <div className="tr-month-head">
@@ -567,38 +754,133 @@ export default function App() {
                         Month {m.roman} — {m.title}
                       </h2>
                       <span className="tr-month-pct">
-                        {monthCompletion(inst.id, m.id)}% complete
+                        {monthCompletion(instId, m.id)}% complete
                       </span>
                     </div>
                     <div className="tr-week-grid">
-                      {m.weeks.map((w) => (
-                        <div className="tr-week-card" key={w.id}>
-                          <h3 className="tr-week-title">{w.label}</h3>
-                          <ul className="tr-task-list">
-                            {w.tasks.map((task, idx) => {
-                              const done = taskDone[inst.id][m.id][w.id][idx];
-                              return (
-                                <li key={idx}>
-                                  <button
-                                    className={`tr-fret tr-fret--small ${done ? "is-done" : ""}`}
-                                    onClick={() =>
-                                      toggleTask(inst.id, m.id, w.id, idx)
-                                    }
-                                    aria-pressed={done}
+                      {m.weeks.map((w) => {
+                        const weekKey = `${instId}:${m.id}:${w.id}`;
+                        const isEditing = editingWeek === weekKey;
+                        return (
+                          <div className="tr-week-card" key={w.id}>
+                            <div className="tr-week-head">
+                              <h3 className="tr-week-title">{w.label}</h3>
+                              <button
+                                className="tr-icon-btn"
+                                onClick={() =>
+                                  setEditingWeek(isEditing ? null : weekKey)
+                                }
+                                aria-label={
+                                  isEditing ? "Done editing week" : "Edit week"
+                                }
+                              >
+                                {isEditing ? (
+                                  <Check size={13} strokeWidth={2.5} />
+                                ) : (
+                                  <Pencil size={13} />
+                                )}
+                              </button>
+                            </div>
+                            {isEditing ? (
+                              <div className="tr-edit-list">
+                                {w.tasks.map((t, idx) => (
+                                  <div
+                                    className="tr-edit-row"
+                                    key={t.id}
+                                    draggable
+                                    onDragStart={() => setDraggedTaskIdx(idx)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => {
+                                      if (
+                                        draggedTaskIdx !== null &&
+                                        draggedTaskIdx !== idx
+                                      ) {
+                                        reorderTask(
+                                          instId,
+                                          m.id,
+                                          w.id,
+                                          draggedTaskIdx,
+                                          idx
+                                        );
+                                      }
+                                      setDraggedTaskIdx(null);
+                                    }}
                                   >
-                                    <span className="tr-fret-dot">
-                                      {done && (
-                                        <Check size={11} strokeWidth={3} />
-                                      )}
-                                    </span>
-                                    <span className="tr-task-text">{task}</span>
-                                  </button>
-                                </li>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      ))}
+                                    <GripVertical
+                                      size={14}
+                                      className="tr-drag-handle"
+                                    />
+                                    <input
+                                      className="tr-task-input"
+                                      value={t.text}
+                                      placeholder="New task..."
+                                      onChange={(e) =>
+                                        updateTaskText(
+                                          instId,
+                                          m.id,
+                                          w.id,
+                                          t.id,
+                                          e.target.value
+                                        )
+                                      }
+                                      ref={(el) => {
+                                        if (el && t.id === focusTaskId) {
+                                          el.focus();
+                                          setFocusTaskId(null);
+                                        }
+                                      }}
+                                    />
+                                    <button
+                                      className="tr-icon-btn"
+                                      onClick={() =>
+                                        removeTask(instId, m.id, w.id, t.id)
+                                      }
+                                      aria-label="Remove task"
+                                    >
+                                      <X size={14} />
+                                    </button>
+                                  </div>
+                                ))}
+                                <button
+                                  className="tr-add-btn"
+                                  onClick={() => addTask(instId, m.id, w.id)}
+                                >
+                                  <Plus size={13} /> Add task
+                                </button>
+                              </div>
+                            ) : (
+                              <ul className="tr-task-list">
+                                {w.tasks.map((t) => {
+                                  const done =
+                                    !!doneMap[
+                                      taskKey(instId, m.id, w.id, t.id)
+                                    ];
+                                  return (
+                                    <li key={t.id}>
+                                      <button
+                                        className={`tr-fret tr-fret--small ${done ? "is-done" : ""}`}
+                                        onClick={() =>
+                                          toggleTask(instId, m.id, w.id, t.id)
+                                        }
+                                        aria-pressed={done}
+                                      >
+                                        <span className="tr-fret-dot">
+                                          {done && (
+                                            <Check size={11} strokeWidth={3} />
+                                          )}
+                                        </span>
+                                        <span className="tr-task-text">
+                                          {t.text}
+                                        </span>
+                                      </button>
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
@@ -616,8 +898,27 @@ export default function App() {
                     <ul className="tr-rep-list">
                       {repertoire
                         .filter((s) => s.instrument === inst)
-                        .map((song) => (
-                          <li key={song.id} className="tr-rep-item">
+                        .map((song, idx) => (
+                          <li
+                            key={song.id}
+                            className="tr-rep-item"
+                            draggable
+                            onDragStart={() =>
+                              setDraggedSong({ instrument: inst, idx })
+                            }
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => {
+                              if (
+                                draggedSong &&
+                                draggedSong.instrument === inst &&
+                                draggedSong.idx !== idx
+                              ) {
+                                reorderSong(inst, draggedSong.idx, idx);
+                              }
+                              setDraggedSong(null);
+                            }}
+                          >
+                            <GripVertical size={14} className="tr-drag-handle" />
                             <div className="tr-rep-info">
                               <span className="tr-rep-song">{song.title}</span>
                               <span className="tr-rep-artist">{song.artist}</span>
@@ -628,9 +929,46 @@ export default function App() {
                             >
                               {STATUS_LABEL[song.status]}
                             </button>
+                            <button
+                              className="tr-icon-btn"
+                              onClick={() => removeSong(song.id)}
+                              aria-label="Remove song"
+                            >
+                              <X size={14} />
+                            </button>
                           </li>
                         ))}
                     </ul>
+                    <div className="tr-rep-add-form">
+                      <input
+                        className="tr-rep-add-input"
+                        placeholder="Song title"
+                        value={songDraft[inst]?.title || ""}
+                        onChange={(e) =>
+                          updateSongDraft(inst, "title", e.target.value)
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addSong(inst);
+                        }}
+                      />
+                      <input
+                        className="tr-rep-add-input"
+                        placeholder="Artist"
+                        value={songDraft[inst]?.artist || ""}
+                        onChange={(e) =>
+                          updateSongDraft(inst, "artist", e.target.value)
+                        }
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") addSong(inst);
+                        }}
+                      />
+                      <button
+                        className="tr-add-btn"
+                        onClick={() => addSong(inst)}
+                      >
+                        <Plus size={13} /> Add song
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
