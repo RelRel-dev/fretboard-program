@@ -1,7 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Flame, Check, Pencil, Plus, X, GripVertical } from "lucide-react";
+import { Flame, Check, Pencil, Plus, X, GripVertical, Star } from "lucide-react";
+import guitarChordData from "@tombatossals/chords-db/lib/guitar.json";
+import GuitarChordDiagram from "./GuitarChordDiagram";
+import PianoChordDiagram from "./PianoChordDiagram";
+import { ROOTS, PIANO_CHORD_TYPES, chordSymbol, findRoot } from "./musicTheory";
 
-const STORAGE_KEY = "fretboard-program-v3";
+const STORAGE_KEY = "fretboard-program-v4";
+const PREV_STORAGE_KEY = "fretboard-program-v3";
 const LEGACY_STORAGE_KEY = "fretboard-program-v2";
 
 const GUITAR_MONTHS_TEMPLATE = [
@@ -365,6 +370,23 @@ const STATUS_LABEL = {
   "can-play": "Can play",
 };
 
+// Guitar's type list comes straight from chords-db so it stays complete;
+// piano's is our own computed formula table (see musicTheory.js).
+const GUITAR_TYPES = guitarChordData.suffixes;
+const PIANO_TYPES = PIANO_CHORD_TYPES.map((t) => t.suffix);
+
+function guitarPositions(rootDisplay, suffix) {
+  const root = findRoot(rootDisplay);
+  const entries = guitarChordData.chords[root.dataKey] || [];
+  const match = entries.find((c) => c.suffix === suffix);
+  return match ? match.positions : [];
+}
+
+function pianoIntervals(suffix) {
+  const match = PIANO_CHORD_TYPES.find((t) => t.suffix === suffix);
+  return match ? match.intervals : [0, 4, 7];
+}
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -374,6 +396,8 @@ function readStorage() {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (raw) return { legacy: false, ...JSON.parse(raw) };
+    const v3Raw = window.localStorage.getItem(PREV_STORAGE_KEY);
+    if (v3Raw) return { legacy: false, ...JSON.parse(v3Raw) };
     const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
     if (legacyRaw) return { legacy: true, ...JSON.parse(legacyRaw) };
     return null;
@@ -395,6 +419,7 @@ function writeStorage(data) {
 
 function parseSection(section) {
   if (section === "repertoire") return { type: "repertoire" };
+  if (section === "chords") return { type: "chords" };
   const [instrument, monthId] = section.split(":");
   return { type: "month", instrument, monthId };
 }
@@ -419,17 +444,29 @@ export default function App() {
   const [repertoire, setRepertoire] = useState(
     () => saved?.repertoire || DEFAULT_REPERTOIRE
   );
+  const [savedChords, setSavedChords] = useState(
+    () => saved?.savedChords || { guitar: [], piano: [] }
+  );
   const [saveError, setSaveError] = useState(false);
   const [editingWeek, setEditingWeek] = useState(null);
   const [draggedTaskIdx, setDraggedTaskIdx] = useState(null);
   const [focusTaskId, setFocusTaskId] = useState(null);
   const [songDraft, setSongDraft] = useState({});
   const [draggedSong, setDraggedSong] = useState(null);
+  const [chordInstrument, setChordInstrument] = useState("guitar");
+  const [chordRoot, setChordRoot] = useState("C");
+  const [chordType, setChordType] = useState("major");
 
   useEffect(() => {
-    const ok = writeStorage({ monthsData, doneMap, dailySessions, repertoire });
+    const ok = writeStorage({
+      monthsData,
+      doneMap,
+      dailySessions,
+      repertoire,
+      savedChords,
+    });
     setSaveError(!ok);
-  }, [monthsData, doneMap, dailySessions, repertoire]);
+  }, [monthsData, doneMap, dailySessions, repertoire, savedChords]);
 
   const toggleTask = useCallback((instrumentId, monthId, weekId, taskId) => {
     const key = taskKey(instrumentId, monthId, weekId, taskId);
@@ -579,6 +616,25 @@ export default function App() {
     });
   }, []);
 
+  const toggleSavedChord = useCallback((instrument, root, suffix) => {
+    const id = `${root}:${suffix}`;
+    setSavedChords((prev) => {
+      const list = prev[instrument] || [];
+      const exists = list.some((c) => c.id === id);
+      const nextList = exists
+        ? list.filter((c) => c.id !== id)
+        : [...list, { id, root, suffix }];
+      return { ...prev, [instrument]: nextList };
+    });
+  }, []);
+
+  const removeSavedChord = useCallback((instrument, id) => {
+    setSavedChords((prev) => ({
+      ...prev,
+      [instrument]: (prev[instrument] || []).filter((c) => c.id !== id),
+    }));
+  }, []);
+
   const toggleDailyBlock = useCallback((instrumentId, blockId) => {
     const key = todayKey();
     setDailySessions((prev) => {
@@ -707,6 +763,17 @@ export default function App() {
             <span className="tr-nav-text">
               <span className="tr-nav-month">Repertoire</span>
               <span className="tr-nav-focus">Songs in progress</span>
+            </span>
+          </button>
+          <button
+            className={`tr-nav-item ${activeSection === "chords" ? "is-active" : ""}`}
+            onClick={() => setActiveSection("chords")}
+            aria-pressed={activeSection === "chords"}
+          >
+            <span className="tr-nav-roman">⚉</span>
+            <span className="tr-nav-text">
+              <span className="tr-nav-month">Chords</span>
+              <span className="tr-nav-focus">Browse &amp; save</span>
             </span>
           </button>
         </nav>
@@ -886,7 +953,7 @@ export default function App() {
                 );
               })()}
             </section>
-          ) : (
+          ) : section.type === "repertoire" ? (
             <section className="tr-repertoire">
               <h2 className="tr-section-title">Repertoire</h2>
               <div className="tr-rep-columns">
@@ -971,6 +1038,159 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+              </div>
+            </section>
+          ) : (
+            <section className="tr-chords">
+              <h2 className="tr-section-title">Chords</h2>
+
+              <div className="tr-chord-toggle">
+                {["guitar", "piano"].map((inst) => (
+                  <button
+                    key={inst}
+                    className={`tr-toggle-btn ${chordInstrument === inst ? "is-active" : ""}`}
+                    onClick={() => {
+                      setChordInstrument(inst);
+                      setChordType("major");
+                    }}
+                    aria-pressed={chordInstrument === inst}
+                  >
+                    {inst.charAt(0).toUpperCase() + inst.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="tr-chord-selectors">
+                <select
+                  className="tr-chord-select"
+                  value={chordRoot}
+                  onChange={(e) => setChordRoot(e.target.value)}
+                  aria-label="Root note"
+                >
+                  {ROOTS.map((r) => (
+                    <option key={r.display} value={r.display}>
+                      {r.display}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="tr-chord-select"
+                  value={chordType}
+                  onChange={(e) => setChordType(e.target.value)}
+                  aria-label="Chord type"
+                >
+                  {(chordInstrument === "guitar" ? GUITAR_TYPES : PIANO_TYPES).map(
+                    (suf) => (
+                      <option key={suf} value={suf}>
+                        {suf}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+
+              {(() => {
+                const symbol = chordSymbol(chordRoot, chordType);
+                const isSaved = (savedChords[chordInstrument] || []).some(
+                  (c) => c.id === `${chordRoot}:${chordType}`
+                );
+
+                if (chordInstrument === "guitar") {
+                  const positions = guitarPositions(chordRoot, chordType);
+                  return (
+                    <div className="tr-chord-browse">
+                      <div className="tr-chord-browse-head">
+                        <span className="tr-chord-symbol">{symbol}</span>
+                        <button
+                          className={`tr-icon-btn tr-save-btn ${isSaved ? "is-saved" : ""}`}
+                          onClick={() =>
+                            toggleSavedChord(chordInstrument, chordRoot, chordType)
+                          }
+                          aria-label={isSaved ? "Remove from saved chords" : "Save chord"}
+                        >
+                          <Star
+                            size={16}
+                            fill={isSaved ? "currentColor" : "none"}
+                          />
+                        </button>
+                      </div>
+                      {positions.length === 0 ? (
+                        <p className="tr-chord-empty">
+                          No voicings found for this combination.
+                        </p>
+                      ) : (
+                        <div className="tr-chord-grid">
+                          {positions.map((pos, idx) => (
+                            <div className="tr-chord-card" key={idx}>
+                              <GuitarChordDiagram position={pos} />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                const root = findRoot(chordRoot);
+                const intervals = pianoIntervals(chordType);
+                return (
+                  <div className="tr-chord-browse">
+                    <div className="tr-chord-browse-head">
+                      <span className="tr-chord-symbol">{symbol}</span>
+                      <button
+                        className={`tr-icon-btn tr-save-btn ${isSaved ? "is-saved" : ""}`}
+                        onClick={() =>
+                          toggleSavedChord(chordInstrument, chordRoot, chordType)
+                        }
+                        aria-label={isSaved ? "Remove from saved chords" : "Save chord"}
+                      >
+                        <Star size={16} fill={isSaved ? "currentColor" : "none"} />
+                      </button>
+                    </div>
+                    <div className="tr-chord-grid">
+                      <div className="tr-chord-card">
+                        <PianoChordDiagram
+                          rootSemitone={root.semitone}
+                          intervals={intervals}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <div className="tr-saved-chords">
+                <h3 className="tr-rep-col-title">
+                  Saved — {chordInstrument.charAt(0).toUpperCase() + chordInstrument.slice(1)}
+                </h3>
+                {(savedChords[chordInstrument] || []).length === 0 ? (
+                  <p className="tr-chord-empty">
+                    No chords saved yet — star one above to add it.
+                  </p>
+                ) : (
+                  <ul className="tr-saved-chord-list">
+                    {(savedChords[chordInstrument] || []).map((c) => (
+                      <li className="tr-saved-chord-chip" key={c.id}>
+                        <button
+                          className="tr-saved-chord-label"
+                          onClick={() => {
+                            setChordRoot(c.root);
+                            setChordType(c.suffix);
+                          }}
+                        >
+                          {chordSymbol(c.root, c.suffix)}
+                        </button>
+                        <button
+                          className="tr-icon-btn"
+                          onClick={() => removeSavedChord(chordInstrument, c.id)}
+                          aria-label="Remove saved chord"
+                        >
+                          <X size={12} />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </section>
           )}

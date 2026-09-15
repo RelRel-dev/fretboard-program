@@ -513,6 +513,206 @@ body {
   background: var(--good-soft);
 }
 
+.tr-chord-toggle {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.tr-toggle-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 7px 16px;
+  color: var(--text-muted);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.tr-toggle-btn:hover {
+  border-color: var(--accent);
+}
+
+.tr-toggle-btn.is-active {
+  border-color: var(--accent);
+  color: var(--text);
+  background: var(--surface-alt);
+}
+
+.tr-chord-selectors {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.tr-chord-select {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12.5px;
+}
+
+.tr-chord-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.tr-chord-browse {
+  margin-top: 18px;
+}
+
+.tr-chord-browse-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.tr-chord-symbol {
+  font-family: 'Fraunces', serif;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.tr-save-btn {
+  width: 30px;
+  height: 30px;
+  color: var(--text-muted);
+}
+
+.tr-save-btn.is-saved {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+.tr-chord-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.tr-chord-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.tr-chord-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chord-diagram-line {
+  stroke: var(--text-muted);
+}
+
+.chord-diagram-fret-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 9px;
+  fill: var(--text-muted);
+}
+
+.chord-diagram-open {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.5;
+}
+
+.chord-diagram-marker--mute {
+  fill: var(--text-muted);
+  font-size: 12px;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.chord-diagram-dot {
+  fill: var(--accent);
+}
+
+.chord-diagram-finger {
+  fill: var(--bg);
+  font-size: 9px;
+  font-weight: 600;
+  font-family: 'IBM Plex Mono', monospace;
+}
+
+.chord-diagram-barre {
+  fill: var(--accent-soft);
+}
+
+.piano-key--white {
+  fill: var(--text);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.piano-key--black {
+  fill: var(--bg);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.piano-key.is-on {
+  fill: var(--good);
+}
+
+.piano-key.is-root {
+  fill: var(--accent);
+}
+
+.piano-key-label {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 8px;
+  fill: var(--bg);
+  pointer-events: none;
+}
+
+.piano-key-label--black {
+  fill: var(--text);
+}
+
+.tr-saved-chords {
+  margin-top: 26px;
+}
+
+.tr-saved-chord-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tr-saved-chord-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 6px 4px 12px;
+}
+
+.tr-saved-chord-label {
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0;
+}
+
 .tr-footer {
   max-width: 1100px;
   margin: 32px auto 0;
