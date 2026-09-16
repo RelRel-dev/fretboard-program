@@ -21,6 +21,48 @@ export const CHROMATIC_SHARP_NAMES = [
   "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B",
 ];
 
+export const CHROMATIC_FLAT_NAMES = [
+  "C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B",
+];
+
+// All display/typed names that should count as correct for a given
+// pitch class (0-11). Natural notes have one; the five black-key
+// pitch classes have both a sharp and a flat spelling.
+export const ENHARMONIC_ANSWERS = CHROMATIC_SHARP_NAMES.map((sharp, i) => {
+  const flat = CHROMATIC_FLAT_NAMES[i];
+  return flat === sharp ? [sharp] : [sharp, flat];
+});
+
+export function randomNoteLabel(pitchClass) {
+  const options = ENHARMONIC_ANSWERS[pitchClass];
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+// Standard tuning, low string (index 0) to high string (index 5),
+// as pitch-class semitones — matches the string order used elsewhere
+// in the app (chords-db's `frets` arrays run the same direction).
+export const STRING_OPEN_NOTES = [
+  { label: "E", semitone: 4 },
+  { label: "A", semitone: 9 },
+  { label: "D", semitone: 2 },
+  { label: "G", semitone: 7 },
+  { label: "B", semitone: 11 },
+  { label: "e", semitone: 4 },
+];
+
+// Cleans up free-typed note input ("c#", "Db", "f sharp") into a
+// canonical "C#"/"Db"-style string for comparison against
+// ENHARMONIC_ANSWERS.
+export function normalizeNoteInput(raw) {
+  const s = raw.trim();
+  if (!s) return "";
+  const letter = s[0].toUpperCase();
+  const rest = s.slice(1).toLowerCase().replace(/\s/g, "");
+  if (rest.startsWith("#") || rest.startsWith("sharp")) return `${letter}#`;
+  if (rest.startsWith("b") || rest.startsWith("flat")) return `${letter}b`;
+  return letter;
+}
+
 // Semitone intervals from the root for each chord type. Covers triads
 // through 13th chords — deliberately not identical to guitar's suffix
 // list (guitar's includes slash/inversion voicings that don't apply

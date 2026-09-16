@@ -3,7 +3,17 @@ import { Flame, Check, Pencil, Plus, X, GripVertical, Star } from "lucide-react"
 import guitarChordData from "@tombatossals/chords-db/lib/guitar.json";
 import GuitarChordDiagram from "./GuitarChordDiagram";
 import PianoChordDiagram from "./PianoChordDiagram";
-import { ROOTS, PIANO_CHORD_TYPES, chordSymbol, findRoot } from "./musicTheory";
+import FretboardQuizDiagram from "./FretboardQuizDiagram";
+import {
+  ROOTS,
+  PIANO_CHORD_TYPES,
+  chordSymbol,
+  findRoot,
+  STRING_OPEN_NOTES,
+  ENHARMONIC_ANSWERS,
+  randomNoteLabel,
+  normalizeNoteInput,
+} from "./musicTheory";
 
 const STORAGE_KEY = "fretboard-program-v4";
 const PREV_STORAGE_KEY = "fretboard-program-v3";
@@ -387,6 +397,41 @@ function pianoIntervals(suffix) {
   return match ? match.intervals : [0, 4, 7];
 }
 
+const QUIZ_NUM_CHOICES = 6;
+
+// Picks NUM_CHOICES-1 wrong pitch classes plus the correct one, each
+// shown once (never both the sharp and flat spelling of the same
+// pitch class), then shuffles the order.
+function buildQuizChoices(correctPitch) {
+  const distractorPool = Array.from({ length: 12 }, (_, i) => i).filter(
+    (p) => p !== correctPitch
+  );
+  for (let i = distractorPool.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [distractorPool[i], distractorPool[j]] = [distractorPool[j], distractorPool[i]];
+  }
+  const pitches = [...distractorPool.slice(0, QUIZ_NUM_CHOICES - 1), correctPitch];
+  for (let i = pitches.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [pitches[i], pitches[j]] = [pitches[j], pitches[i]];
+  }
+  return pitches.map((p) => ({ pitch: p, label: randomNoteLabel(p) }));
+}
+
+function generateQuizQuestion() {
+  const stringIdx = Math.floor(Math.random() * STRING_OPEN_NOTES.length);
+  const fret = Math.floor(Math.random() * 13); // 0-12 inclusive
+  const pitch = (STRING_OPEN_NOTES[stringIdx].semitone + fret) % 12;
+  const mode = Math.random() < 0.5 ? "choice" : "type";
+  return {
+    stringIdx,
+    fret,
+    pitch,
+    mode,
+    choices: mode === "choice" ? buildQuizChoices(pitch) : null,
+  };
+}
+
 function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -420,6 +465,7 @@ function writeStorage(data) {
 function parseSection(section) {
   if (section === "repertoire") return { type: "repertoire" };
   if (section === "chords") return { type: "chords" };
+  if (section === "quiz") return { type: "quiz" };
   const [instrument, monthId] = section.split(":");
   return { type: "month", instrument, monthId };
 }
@@ -456,6 +502,15 @@ export default function App() {
   const [chordInstrument, setChordInstrument] = useState("guitar");
   const [chordRoot, setChordRoot] = useState("C");
   const [chordType, setChordType] = useState("major");
+  const [quizQuestion, setQuizQuestion] = useState(() => generateQuizQuestion());
+  const [quizStatus, setQuizStatus] = useState(null); // null | "correct" | "wrong"
+  const [quizChosenPitch, setQuizChosenPitch] = useState(null);
+  const [quizStreak, setQuizStreak] = useState(0);
+  const [quizHighScore, setQuizHighScore] = useState(
+    () => saved?.quizHighScore || 0
+  );
+  const [quizTyped, setQuizTyped] = useState("");
+  const [quizKey, setQuizKey] = useState(0);
 
   useEffect(() => {
     const ok = writeStorage({
@@ -464,9 +519,10 @@ export default function App() {
       dailySessions,
       repertoire,
       savedChords,
+      quizHighScore,
     });
     setSaveError(!ok);
-  }, [monthsData, doneMap, dailySessions, repertoire, savedChords]);
+  }, [monthsData, doneMap, dailySessions, repertoire, savedChords, quizHighScore]);
 
   const toggleTask = useCallback((instrumentId, monthId, weekId, taskId) => {
     const key = taskKey(instrumentId, monthId, weekId, taskId);
@@ -635,6 +691,45 @@ export default function App() {
     }));
   }, []);
 
+  const resolveQuizAnswer = useCallback(
+    (isCorrect) => {
+      setQuizStatus(isCorrect ? "correct" : "wrong");
+      if (isCorrect) {
+        setQuizStreak((prev) => {
+          const next = prev + 1;
+          setQuizHighScore((hs) => Math.max(hs, next));
+          return next;
+        });
+      } else {
+        setQuizStreak(0);
+      }
+      window.setTimeout(() => {
+        setQuizStatus(null);
+        setQuizChosenPitch(null);
+        setQuizTyped("");
+        setQuizKey((k) => k + 1);
+        setQuizQuestion(generateQuizQuestion());
+      }, isCorrect ? 700 : 1500);
+    },
+    []
+  );
+
+  const handleQuizChoice = useCallback(
+    (pitch) => {
+      if (quizStatus) return;
+      setQuizChosenPitch(pitch);
+      resolveQuizAnswer(pitch === quizQuestion.pitch);
+    },
+    [quizStatus, quizQuestion, resolveQuizAnswer]
+  );
+
+  const handleQuizTypedSubmit = useCallback(() => {
+    if (quizStatus || !quizTyped.trim()) return;
+    const normalized = normalizeNoteInput(quizTyped);
+    const correct = ENHARMONIC_ANSWERS[quizQuestion.pitch].includes(normalized);
+    resolveQuizAnswer(correct);
+  }, [quizStatus, quizTyped, quizQuestion, resolveQuizAnswer]);
+
   const toggleDailyBlock = useCallback((instrumentId, blockId) => {
     const key = todayKey();
     setDailySessions((prev) => {
@@ -774,6 +869,17 @@ export default function App() {
             <span className="tr-nav-text">
               <span className="tr-nav-month">Chords</span>
               <span className="tr-nav-focus">Browse &amp; save</span>
+            </span>
+          </button>
+          <button
+            className={`tr-nav-item ${activeSection === "quiz" ? "is-active" : ""}`}
+            onClick={() => setActiveSection("quiz")}
+            aria-pressed={activeSection === "quiz"}
+          >
+            <span className="tr-nav-roman">?</span>
+            <span className="tr-nav-text">
+              <span className="tr-nav-month">Note Quiz</span>
+              <span className="tr-nav-focus">Name that note</span>
             </span>
           </button>
         </nav>
@@ -1040,7 +1146,7 @@ export default function App() {
                 ))}
               </div>
             </section>
-          ) : (
+          ) : section.type === "chords" ? (
             <section className="tr-chords">
               <h2 className="tr-section-title">Chords</h2>
 
@@ -1192,6 +1298,80 @@ export default function App() {
                   </ul>
                 )}
               </div>
+            </section>
+          ) : (
+            <section className="tr-quiz">
+              <div className="tr-quiz-head">
+                <h2 className="tr-section-title">Note Quiz</h2>
+                <div className="tr-quiz-stats">
+                  <span>
+                    Streak <strong>{quizStreak}</strong>
+                  </span>
+                  <span>
+                    Best <strong>{quizHighScore}</strong>
+                  </span>
+                </div>
+              </div>
+              <p className="tr-quiz-prompt">What note is this?</p>
+
+              <FretboardQuizDiagram
+                targetString={quizQuestion.stringIdx}
+                targetFret={quizQuestion.fret}
+                status={quizStatus}
+                dotKey={quizKey}
+              />
+
+              {quizStatus === "wrong" && (
+                <p className="tr-quiz-reveal">
+                  That was {ENHARMONIC_ANSWERS[quizQuestion.pitch].join(" / ")}
+                </p>
+              )}
+
+              {quizQuestion.mode === "choice" ? (
+                <div className="tr-quiz-choices">
+                  {quizQuestion.choices.map((choice) => {
+                    let choiceClass = "";
+                    if (quizStatus) {
+                      if (choice.pitch === quizQuestion.pitch) {
+                        choiceClass = "is-correct";
+                      } else if (choice.pitch === quizChosenPitch) {
+                        choiceClass = "is-wrong-chosen";
+                      }
+                    }
+                    return (
+                      <button
+                        key={choice.pitch}
+                        className={`tr-quiz-choice-btn ${choiceClass}`}
+                        onClick={() => handleQuizChoice(choice.pitch)}
+                        disabled={!!quizStatus}
+                      >
+                        {choice.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="tr-quiz-type-row">
+                  <input
+                    className="tr-quiz-input"
+                    value={quizTyped}
+                    onChange={(e) => setQuizTyped(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleQuizTypedSubmit();
+                    }}
+                    placeholder="Type the note (e.g. C# or Db)"
+                    disabled={!!quizStatus}
+                    autoFocus
+                  />
+                  <button
+                    className="tr-add-btn"
+                    onClick={handleQuizTypedSubmit}
+                    disabled={!!quizStatus}
+                  >
+                    Check
+                  </button>
+                </div>
+              )}
             </section>
           )}
         </main>
