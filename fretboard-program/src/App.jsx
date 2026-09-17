@@ -4,6 +4,7 @@ import guitarChordData from "@tombatossals/chords-db/lib/guitar.json";
 import GuitarChordDiagram from "./GuitarChordDiagram";
 import PianoChordDiagram from "./PianoChordDiagram";
 import FretboardQuizDiagram from "./FretboardQuizDiagram";
+import MetronomeWidget from "./MetronomeWidget";
 import {
   ROOTS,
   PIANO_CHORD_TYPES,
@@ -804,6 +805,7 @@ export default function App() {
 
   return (
     <div className="tracker-root">
+      <MetronomeWidget />
       <header className="tr-header">
         <div>
           <p className="tr-eyebrow">Guitar, Bass &amp; Piano</p>
