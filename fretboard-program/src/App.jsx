@@ -5,6 +5,7 @@ import GuitarChordDiagram from "./GuitarChordDiagram";
 import PianoChordDiagram from "./PianoChordDiagram";
 import FretboardQuizDiagram from "./FretboardQuizDiagram";
 import MetronomeWidget from "./MetronomeWidget";
+import TabsSection from "./TabsSection";
 import {
   ROOTS,
   PIANO_CHORD_TYPES,
@@ -467,6 +468,7 @@ function parseSection(section) {
   if (section === "repertoire") return { type: "repertoire" };
   if (section === "chords") return { type: "chords" };
   if (section === "quiz") return { type: "quiz" };
+  if (section === "tabs") return { type: "tabs" };
   const [instrument, monthId] = section.split(":");
   return { type: "month", instrument, monthId };
 }
@@ -882,6 +884,17 @@ export default function App() {
             <span className="tr-nav-text">
               <span className="tr-nav-month">Note Quiz</span>
               <span className="tr-nav-focus">Name that note</span>
+            </span>
+          </button>
+          <button
+            className={`tr-nav-item ${activeSection === "tabs" ? "is-active" : ""}`}
+            onClick={() => setActiveSection("tabs")}
+            aria-pressed={activeSection === "tabs"}
+          >
+            <span className="tr-nav-roman">♫</span>
+            <span className="tr-nav-text">
+              <span className="tr-nav-month">Tabs</span>
+              <span className="tr-nav-focus">Practice &amp; drills</span>
             </span>
           </button>
         </nav>
@@ -1301,7 +1314,7 @@ export default function App() {
                 )}
               </div>
             </section>
-          ) : (
+          ) : section.type === "quiz" ? (
             <section className="tr-quiz">
               <div className="tr-quiz-head">
                 <h2 className="tr-section-title">Note Quiz</h2>
@@ -1375,7 +1388,9 @@ export default function App() {
                 </div>
               )}
             </section>
-          )}
+          ) : section.type === "tabs" ? (
+            <TabsSection />
+          ) : null}
         </main>
       </div>
 
