@@ -6,6 +6,7 @@ import PianoChordDiagram from "./PianoChordDiagram";
 import FretboardQuizDiagram from "./FretboardQuizDiagram";
 import MetronomeWidget from "./MetronomeWidget";
 import TabsSection from "./TabsSection";
+import IntervalTrainer from "./IntervalTrainer";
 import {
   ROOTS,
   PIANO_CHORD_TYPES,
@@ -469,6 +470,7 @@ function parseSection(section) {
   if (section === "chords") return { type: "chords" };
   if (section === "quiz") return { type: "quiz" };
   if (section === "tabs") return { type: "tabs" };
+  if (section === "intervals") return { type: "intervals" };
   const [instrument, monthId] = section.split(":");
   return { type: "month", instrument, monthId };
 }
@@ -884,6 +886,17 @@ export default function App() {
             <span className="tr-nav-text">
               <span className="tr-nav-month">Note Quiz</span>
               <span className="tr-nav-focus">Name that note</span>
+            </span>
+          </button>
+          <button
+            className={`tr-nav-item ${activeSection === "intervals" ? "is-active" : ""}`}
+            onClick={() => setActiveSection("intervals")}
+            aria-pressed={activeSection === "intervals"}
+          >
+            <span className="tr-nav-roman">♭3</span>
+            <span className="tr-nav-text">
+              <span className="tr-nav-month">Intervals</span>
+              <span className="tr-nav-focus">Hear it, find it</span>
             </span>
           </button>
           <button
@@ -1390,6 +1403,8 @@ export default function App() {
             </section>
           ) : section.type === "tabs" ? (
             <TabsSection />
+          ) : section.type === "intervals" ? (
+            <IntervalTrainer />
           ) : null}
         </main>
       </div>
